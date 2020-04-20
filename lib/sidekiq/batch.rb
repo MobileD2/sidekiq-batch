@@ -178,10 +178,13 @@ module Sidekiq
       end
 
       def process_successful_job(bid, jid)
+        scheduled_jobs = Sidekiq::ScheduledSet.new.select{ |job| job['bid'] == bid }
+        retry_jobs = Sidekiq::RetrySet.new.select{ |job| job['bid'] == bid }
+
         failed, pending, children, complete, success, total, parent_bid = Sidekiq.redis do |r|
           r.multi do
             r.scard("BID-#{bid}-failed")
-            r.hincrby("BID-#{bid}", "pending", -1)
+            r.hincrby("BID-#{bid}", "pending", scheduled_jobs.empty? && retry_jobs.empty? ? -1 : 0)
             r.hincrby("BID-#{bid}", "children", 0)
             r.scard("BID-#{bid}-complete")
             r.scard("BID-#{bid}-success")
